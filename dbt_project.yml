@@ -3,3 +3,17 @@ version: '0.1.0'
 config-version: 2
 require-dbt-version: [">=1.0.0", "<3.0.0"]
 macro-paths: ["macros"]
+
+vars:
+  # Explicit Glue/LF database name (project-wide). Takes priority over the prefix pattern.
+  ext_database: ""
+
+  # Prefix for deriving the Glue/LF database name from the schema: "{prefix}_{schema}".
+  ext_database_prefix: ""
+
+  # Default IAM role ARN used when a source has no config.meta.iam_role.
+  ext_iam_role: ""
+
+  # ARN prefix for expanding short role names from config.meta.iam_role:
+  # "{prefix}/{short_name}" → e.g. "arn:aws:iam::123456789012:role"
+  ext_iam_role_prefix: ""

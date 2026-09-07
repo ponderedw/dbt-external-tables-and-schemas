@@ -35,63 +35,66 @@ dbt run-operation stage_external_sources --args "select: snowplow.event"
 
 ## Configuration
 
-The Redshift schema creation requires two values per schema: the **Glue/Lake Formation database name** and the **IAM role ARN**. These can be set at four levels (highest priority wins).
+Schema creation requires two values: the **Glue/Lake Formation database name** and the **IAM role ARN**. Both support a prefix pattern so you don't have to repeat the full value in every source file.
 
-### 1. `external.meta` in sources YAML
+### `database`
 
-Useful when different schemas use different IAM roles or databases.
+Priority order (first match wins):
 
+| Level | How to set |
+|---|---|
+| Per-source explicit | `external.meta.database` or `config.meta.database` in sources YAML |
+| Project-wide explicit | `ext_database` var or `DBT_EXT_DATABASE` env var |
+| Project-wide prefix | `ext_database_prefix` var or `DBT_EXT_DATABASE_PREFIX` env var → database = `{prefix}_{schema}` |
+
+**Prefix pattern** (most common — one setting covers all schemas):
 ```yaml
-# models/sources.yml
-sources:
-  - name: snowplow
-    schema: spectrum_snowplow
-    tables:
-      - name: event
-        external:
-          location: "s3://my-bucket/snowplow/events/"
-          meta:
-            database: my_glue_database
-            iam_role: "arn:aws:iam::123456789012:role/RedshiftSpectrumRole"
-          # ... other dbt-external-tables properties
+# dbt_project.yml
+vars:
+  ext_database_prefix: "aws_database_production"
 ```
+Schema `external_tables_qualtrics` → database `aws_database_production_external_tables_qualtrics`.
 
-### 2. `config.meta` in sources YAML
+### `iam_role`
 
-Applies to all tables under a source entry. Useful for grouping config with the rest of your dbt source metadata.
+Priority order (first match wins):
 
-```yaml
-sources:
-  - name: snowplow
-    schema: spectrum_snowplow
-    tables:
-      - name: event
-        config:
-          meta:
-            database: my_glue_database
-            iam_role: "arn:aws:iam::123456789012:role/RedshiftSpectrumRole"
-        external:
-          location: "s3://my-bucket/snowplow/events/"
-```
+| Level | How to set |
+|---|---|
+| Per-source explicit | `external.meta.iam_role` or `config.meta.iam_role` in sources YAML |
+| Project-wide default | `ext_iam_role` var or `DBT_EXT_IAM_ROLE` env var (full ARN) |
 
-All tables sharing the same `schema` must agree on `database` and `iam_role` — the values from the first table encountered are used for schema creation.
-
-### 3. Project vars
-
-Applies to all external schemas in the project.
+`config.meta.iam_role` accepts either a **full ARN** (used as-is) or a **short role name**, which is expanded using `ext_iam_role_prefix` var / `DBT_EXT_IAM_ROLE_PREFIX` env var:
 
 ```yaml
 # dbt_project.yml
 vars:
-  ext_database: my_glue_database
-  ext_iam_role: "arn:aws:iam::123456789012:role/RedshiftSpectrumRole"
+  ext_iam_role_prefix: "arn:aws:iam::123456789012:role"
 ```
+```yaml
+# sources YAML — per-source short name
+sources:
+  - name: my_source
+    tables:
+      - name: my_table
+        config:
+          meta:
+            iam_role: "my_spectrum_role"
+        external:
+          location: "s3://..."
+```
+→ `arn:aws:iam::123456789012:role/my_spectrum_role`
 
-### 4. Environment variables
+Sources without a `config.meta.iam_role` fall back to `ext_iam_role` / `DBT_EXT_IAM_ROLE`.
 
-```bash
-export DBT_EXT_DATABASE=my_glue_database
-export DBT_EXT_IAM_ROLE=arn:aws:iam::123456789012:role/RedshiftSpectrumRole
+### Typical project setup
+
+```yaml
+# dbt_project.yml
+vars:
+  ext_database_prefix: "aws_database_production"       # or use env var DBT_EXT_DATABASE_PREFIX
+  ext_iam_role_prefix: "arn:aws:iam::123456789012:role" # or use env var DBT_EXT_IAM_ROLE_PREFIX
+  ext_iam_role: "arn:aws:iam::123456789012:role/DefaultSpectrumRole"  # fallback for sources without iam_role
 ```
 
 ## What gets executed for Redshift

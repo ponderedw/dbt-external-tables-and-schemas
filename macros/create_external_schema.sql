@@ -15,23 +15,30 @@
 {#
   Redshift Spectrum: CREATE EXTERNAL SCHEMA IF NOT EXISTS ... FROM DATA CATALOG.
 
-  Configuration (in priority order):
-    1. external.meta in sources YAML:
-         external:
-           meta:
-             database: my_glue_db
-             iam_role: arn:aws:iam::123456789012:role/MyRole
-    2. config.meta in sources YAML:
-         config:
-           meta:
-             database: my_glue_db
-             iam_role: arn:aws:iam::123456789012:role/MyRole
-    3. Project vars:
-         vars:
-           ext_database: my_glue_db
-           ext_iam_role: arn:aws:iam::123456789012:role/MyRole
-    4. Environment variables:
-         DBT_EXT_DATABASE, DBT_EXT_IAM_ROLE
+  ── database ─────────────────────────────────────────────────────────────────
+  Priority:
+    1. external.meta.database or config.meta.database  (explicit, per-source)
+    2. ext_database var / DBT_EXT_DATABASE env var      (explicit, project-wide)
+    3. ext_database_prefix var / DBT_EXT_DATABASE_PREFIX env var
+       → database = "{prefix}_{schema}"               (derived, project-wide)
+
+  Example (prefix pattern):
+    vars:
+      ext_database_prefix: "glue_db_prod"
+    → schema "my_schema" becomes database "glue_db_prod_my_schema"
+
+  ── iam_role ─────────────────────────────────────────────────────────────────
+  Priority:
+    1. external.meta.iam_role or config.meta.iam_role
+       - Full ARN  (starts with "arn:") → used as-is
+       - Short name                     → "{ext_iam_role_prefix}/{short_name}"
+    2. ext_iam_role var / DBT_EXT_IAM_ROLE env var  (full ARN, project-wide default)
+
+  Example (short name + prefix pattern):
+    vars:
+      ext_iam_role_prefix: "arn:aws:iam::123456789012:role"
+    config.meta.iam_role: "my_spectrum_role"
+    → "arn:aws:iam::123456789012:role/my_spectrum_role"
 #}
 {%- macro redshift__create_external_schema(source_node) -%}
 
@@ -39,28 +46,42 @@
     {%- set ext_meta = ext.meta | default({}) -%}
     {%- set config_meta = source_node.config.meta | default({}) -%}
 
-    {%- set database = ext_meta.database | default('')
+    {# ── Resolve database ── #}
+    {%- set database_explicit = ext_meta.database | default('')
         or config_meta.database | default('')
         or var('ext_database', '')
         or env_var('DBT_EXT_DATABASE', '') -%}
 
-    {%- set iam_role = ext_meta.iam_role | default('')
-        or config_meta.iam_role | default('')
-        or var('ext_iam_role', '')
-        or env_var('DBT_EXT_IAM_ROLE', '') -%}
+    {%- set database_prefix = var('ext_database_prefix', '') or env_var('DBT_EXT_DATABASE_PREFIX', '') -%}
+
+    {%- set database = database_explicit or (database_prefix ~ '_' ~ source_node.schema if database_prefix else '') -%}
+
+    {# ── Resolve iam_role ── #}
+    {%- set iam_role_raw = ext_meta.iam_role | default('') or config_meta.iam_role | default('') -%}
+    {%- set iam_role_prefix = var('ext_iam_role_prefix', '') or env_var('DBT_EXT_IAM_ROLE_PREFIX', '') -%}
+
+    {%- if iam_role_raw -%}
+        {%- if iam_role_raw.startswith('arn:') or not iam_role_prefix -%}
+            {%- set iam_role = iam_role_raw -%}
+        {%- else -%}
+            {%- set iam_role = iam_role_prefix ~ '/' ~ iam_role_raw -%}
+        {%- endif -%}
+    {%- else -%}
+        {%- set iam_role = var('ext_iam_role', '') or env_var('DBT_EXT_IAM_ROLE', '') -%}
+    {%- endif -%}
 
     {%- if not database -%}
         {{ exceptions.raise_compiler_error(
             "dbt_external_tables_and_schemas: 'database' is required to create external schema '"
             ~ source_node.schema ~ "'. Set it via external.meta.database, config.meta.database, "
-            ~ "the 'ext_database' var, or the DBT_EXT_DATABASE env var."
+            ~ "the 'ext_database' / 'ext_database_prefix' var, or the DBT_EXT_DATABASE / DBT_EXT_DATABASE_PREFIX env var."
         ) }}
     {%- endif -%}
 
     {%- if not iam_role -%}
         {{ exceptions.raise_compiler_error(
             "dbt_external_tables_and_schemas: 'iam_role' is required to create external schema '"
-            ~ source_node.schema ~ "'. Set it via external.meta.iam_role, config.meta.iam_role, "
+            ~ source_node.schema ~ "'. Set it via external.meta.iam_role, config.meta.iam_role (short name or full ARN), "
             ~ "the 'ext_iam_role' var, or the DBT_EXT_IAM_ROLE env var."
         ) }}
     {%- endif -%}
