@@ -12,8 +12,8 @@ In your project's `packages.yml`, replace any direct dependency on `dbt-external
 
 ```yaml
 packages:
-  - package: ponder-data/dbt_external_tables_and_schemas
-    version: [">=0.1.0", "<1.0.0"]
+  - git: "https://github.com/ponderedw/dbt-external-tables-and-schemas.git"
+    revision: v1.0.0
 ```
 
 > Do **not** also list `dbt-labs/dbt_external_tables` — this package brings it in as a dependency.
