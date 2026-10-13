@@ -1,12 +1,15 @@
-{% macro stage_external_sources(select=none) %}
+{% macro stage_external_sources_and_schemas(select=none) %}
 
     {#
       Step 1: Create external schemas for all selected external sources (deduplicated by schema).
       Step 2: Delegate table staging to the original dbt_external_tables package.
 
-      This macro shadows dbt_external_tables.stage_external_sources so users run the same command:
-        dbt run-operation stage_external_sources
-        dbt run-operation stage_external_sources --args "select: snowplow.event"
+      Named stage_external_sources_and_schemas (not stage_external_sources) to avoid a macro name
+      collision with dbt_external_tables in dbt v2, which raises an error when two packages define
+      the same macro name.
+
+        dbt run-operation stage_external_sources_and_schemas
+        dbt run-operation stage_external_sources_and_schemas --args "select: snowplow.event"
     #}
 
     {% if execute %}
@@ -18,7 +21,6 @@
         {% for node in source_nodes %}
             {% if node.external %}
 
-                {# Mirror the selection logic from dbt_external_tables.stage_external_sources #}
                 {% set selected = namespace(value=(select is none)) %}
                 {% if select %}
                     {% for src in select.split(' ') %}
