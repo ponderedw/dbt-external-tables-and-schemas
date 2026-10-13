@@ -13,7 +13,7 @@ In your project's `packages.yml`, replace any direct dependency on `dbt-external
 ```yaml
 packages:
   - git: "https://github.com/ponderedw/dbt-external-tables-and-schemas.git"
-    revision: v1.0.0
+    revision: v1.1.0
 ```
 
 > Do **not** also list `dbt-labs/dbt_external_tables` — this package brings it in as a dependency.
