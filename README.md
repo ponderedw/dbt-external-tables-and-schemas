@@ -2,7 +2,7 @@
 
 A dbt package that extends [dbt-labs/dbt-external-tables](https://github.com/dbt-labs/dbt-external-tables) with automatic external schema creation before staging external sources.
 
-The original `dbt-external-tables` package can create and refresh external tables, but it cannot create the external schema itself. This package fills that gap: when you run `stage_external_sources`, it first creates any missing external schemas, then delegates table staging to the original package.
+The original `dbt-external-tables` package can create and refresh external tables, but it cannot create the external schema itself. This package fills that gap: when you run `stage_external_sources_and_schemas`, it first creates any missing external schemas, then delegates table staging to the original package.
 
 Redshift Spectrum is the primary target (requires `CREATE EXTERNAL SCHEMA ... FROM DATA CATALOG`). All other adapters fall back to the original package's behavior.
 
@@ -22,16 +22,16 @@ Run `dbt deps` to install.
 
 ## Usage
 
-The commands are identical to the original package:
-
 ```bash
 # Stage all external sources (creates schemas first)
-dbt run-operation stage_external_sources
+dbt run-operation stage_external_sources_and_schemas
 
 # Stage a specific source or table
-dbt run-operation stage_external_sources --args "select: snowplow"
-dbt run-operation stage_external_sources --args "select: snowplow.event"
+dbt run-operation stage_external_sources_and_schemas --args "select: snowplow"
+dbt run-operation stage_external_sources_and_schemas --args "select: snowplow.event"
 ```
+
+> **Note:** The macro is named `stage_external_sources_and_schemas` rather than `stage_external_sources` to avoid a name collision with the upstream `dbt_external_tables` package in dbt v2, which raises an error when two packages define the same macro name.
 
 ## Configuration
 
@@ -109,7 +109,7 @@ iam_role '<iam_role>'
 create external database if not exists
 ```
 
-If the schema already exists, this is a no-op. After all schemas are ensured, the original `dbt_external_tables.stage_external_sources` runs to create or refresh the tables.
+If the schema already exists, this is a no-op. After all schemas are ensured, `dbt_external_tables.stage_external_sources` runs to create or refresh the tables.
 
 ## Non-Redshift adapters
 
